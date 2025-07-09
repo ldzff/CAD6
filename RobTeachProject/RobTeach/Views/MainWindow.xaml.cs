@@ -2601,13 +2601,18 @@ namespace RobTeach.Views
             // We want targetCanvasX = margin, targetCanvasY = margin.
 
             _translateTransform.X = margin - (dxfBoxLeftX * _scaleTransform.ScaleX);
-            _translateTransform.Y = margin - (dxfBoxTopY * _scaleTransform.ScaleY);
+            // _translateTransform.Y = margin - (dxfBoxTopY * _scaleTransform.ScaleY); // Original Top-Left Y
 
-            AppLogger.Log($"PerformFitToView (Top-Left Align): DXF BBox TL: X={dxfBoxLeftX:F3}, Y={dxfBoxTopY:F3}", LogLevel.Debug);
-            AppLogger.Log($"PerformFitToView (Top-Left Align): Applied TranslateTransform: X={_translateTransform.X:F3}, Y={_translateTransform.Y:F3}", LogLevel.Info);
+            // DIAGNOSTIC: Force a large positive Y translation
+            _translateTransform.Y = canvasHeight / 2.0; // Force it down by half canvas height for testing
+            AppLogger.Log($"[DIAGNOSTIC] PerformFitToView: Overriding TranslateY to: {_translateTransform.Y:F3}", LogLevel.Warning);
 
-            StatusTextBlock.Text = "View fitted to content (TL aligned).";
-            AppLogger.Log("PerformFitToView: Method completed with top-left alignment.", LogLevel.Info);
+
+            AppLogger.Log($"PerformFitToView (Top-Left Align strategy for X, DIAGNOSTIC Y): DXF BBox TL: X={dxfBoxLeftX:F3}, Y={dxfBoxTopY:F3}", LogLevel.Debug);
+            AppLogger.Log($"PerformFitToView (Top-Left Align strategy for X, DIAGNOSTIC Y): Applied TranslateTransform: X={_translateTransform.X:F3}, Y={_translateTransform.Y:F3}", LogLevel.Info);
+
+            StatusTextBlock.Text = "View fitted (Diagnostic TL-X, Forced Y).";
+            AppLogger.Log("PerformFitToView: Method completed with Diagnostic Top-Left X alignment and Forced Y translation.", LogLevel.Info);
         }
         private void CadCanvas_MouseWheel(object sender, MouseWheelEventArgs e) { /* ... (No change) ... */ }
         private void CadCanvas_MouseDown(object sender, MouseButtonEventArgs e)
