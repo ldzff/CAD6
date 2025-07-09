@@ -2382,8 +2382,10 @@ namespace RobTeach.Views
         /// <returns>A Rect representing the bounding box, or Rect.Empty if no valid bounds can be determined.</returns>
         private Rect GetDxfBoundingBox(DxfFile dxfDoc)
         {
+            AppLogger.Log("GetDxfBoundingBox: Method started.", LogLevel.Debug);
             if (dxfDoc == null)
             {
+                AppLogger.Log("GetDxfBoundingBox: dxfDoc is null. Returning Rect.Empty.", LogLevel.Warning);
                 return Rect.Empty;
             }
 
@@ -2394,7 +2396,7 @@ namespace RobTeach.Views
             // Calculate bounds directly from entities
             if (dxfDoc.Entities != null && dxfDoc.Entities.Any())
             {
-                AppLogger.Log($"GetDxfBoundingBox: Processing {dxfDoc.Entities.Count()} entities.", LogLevel.Debug);
+                AppLogger.Log($"GetDxfBoundingBox: Processing {dxfDoc.Entities.Count()} entities.", LogLevel.Info);
                 int entityIndex = 0;
                 foreach (var entity in dxfDoc.Entities)
                 {
@@ -2405,31 +2407,17 @@ namespace RobTeach.Views
                         continue;
                     }
 
+                    string entityType = entity.GetType().Name;
+                    string entityLayer = entity.Layer ?? "NULL_LAYER";
+                    AppLogger.Log($"GetDxfBoundingBox: Processing Entity Idx:{entityIndex}, Type:{entityType}, Layer:'{entityLayer}'.", LogLevel.Debug);
+
                     // Layer filtering for bounding box
-                    if (_layersToIgnoreForBoundingBox.Contains(entity.Layer, StringComparer.OrdinalIgnoreCase))
+                    if (_layersToIgnoreForBoundingBox.Contains(entityLayer, StringComparer.OrdinalIgnoreCase))
                     {
-                        AppLogger.Log($"GetDxfBoundingBox: Idx:{entityIndex}, Type:{entity.GetType().Name}, Layer:'{entity.Layer}' - SKIPPED for bounding box.", LogLevel.Debug);
+                        AppLogger.Log($"GetDxfBoundingBox: Idx:{entityIndex}, Type:{entityType}, Layer:'{entityLayer}' - SKIPPED for bounding box due to layer filter.", LogLevel.Info);
                         entityIndex++;
                         continue;
                     }
-
-                    // Temporary specific filter for large axis lines if they are not caught by layer filter
-                    //if (entity is DxfLine axisCand)
-                    //{
-                    //    bool isLikelyXAxis = Math.Abs(axisCand.P1.Y) < 0.01 && Math.Abs(axisCand.P2.Y) < 0.01 &&
-                    //                        ((Math.Abs(axisCand.P1.X + 1000) < 0.01 && Math.Abs(axisCand.P2.X - 1000) < 0.01) ||
-                    //                         (Math.Abs(axisCand.P1.X - 1000) < 0.01 && Math.Abs(axisCand.P2.X + 1000) < 0.01));
-                    //    bool isLikelyYAxis = Math.Abs(axisCand.P1.X) < 0.01 && Math.Abs(axisCand.P2.X) < 0.01 &&
-                    //                        ((Math.Abs(axisCand.P1.Y + 1000) < 0.01 && Math.Abs(axisCand.P2.Y - 1000) < 0.01) ||
-                    //                         (Math.Abs(axisCand.P1.Y - 1000) < 0.01 && Math.Abs(axisCand.P2.Y + 1000) < 0.01));
-                    //
-                    //    if (isLikelyXAxis || isLikelyYAxis)
-                    //    {
-                    //        AppLogger.Log($"GetDxfBoundingBox: Idx:{entityIndex}, Type:DxfLine, Coords:[P1({axisCand.P1.X:F0},{axisCand.P1.Y:F0}) P2({axisCand.P2.X:F0},{axisCand.P2.Y:F0})] - SKIPPED as likely oversized axis (specific filter).", LogLevel.Debug);
-                    //        entityIndex++;
-                    //        continue;
-                    //    }
-                    //}
 
                     try
                     {
@@ -2439,8 +2427,8 @@ namespace RobTeach.Views
                         if (boundsTuple.HasValue)
                         {
                             var (eMinX_val, eMinY_val, eMaxX_val, eMaxY_val) = boundsTuple.Value;
-                            boundsStr = $"X:[{eMinX_val:F2} to {eMaxX_val:F2}], Y:[{eMinY_val:F2} to {eMaxY_val:F2}]";
-                            AppLogger.Log($"GetDxfBoundingBox: Idx:{entityIndex}, Type:{entity.GetType().Name}, Layer:'{entity.Layer}', Individual Bounds:{boundsStr}", LogLevel.Debug);
+                            boundsStr = $"MinX:{eMinX_val:F3}, MinY:{eMinY_val:F3}, MaxX:{eMaxX_val:F3}, MaxY:{eMaxY_val:F3}";
+                            AppLogger.Log($"GetDxfBoundingBox: Idx:{entityIndex}, Type:{entityType}, Layer:'{entityLayer}'. Individual Bounds: {boundsStr}", LogLevel.Debug);
 
                             minX = Math.Min(minX, eMinX_val);
                             minY = Math.Min(minY, eMinY_val);
@@ -2450,17 +2438,17 @@ namespace RobTeach.Views
                         }
                         else
                         {
-                            AppLogger.Log($"GetDxfBoundingBox: Idx:{entityIndex}, Type:{entity.GetType().Name}, Layer:'{entity.Layer}' - No valid bounds returned by CalculateEntityBoundsSimple.", LogLevel.Debug);
+                            AppLogger.Log($"GetDxfBoundingBox: Idx:{entityIndex}, Type:{entityType}, Layer:'{entityLayer}' - No valid bounds returned by CalculateEntityBoundsSimple.", LogLevel.Debug);
                         }
-                        // Log cumulative bounds after each entity that contributes
-                        if (hasValidBounds) // Only log if we have some valid bounds so far
+
+                        if (hasValidBounds)
                         {
-                            AppLogger.Log($"GetDxfBoundingBox: Cumulative after Idx:{entityIndex} - MinX:{minX:F2}, MinY:{minY:F2}, MaxX:{maxX:F2}, MaxY:{maxY:F2}", LogLevel.Debug);
+                            AppLogger.Log($"GetDxfBoundingBox: Cumulative after Idx:{entityIndex} - MinX:{minX:F3}, MinY:{minY:F3}, MaxX:{maxX:F3}, MaxY:{maxY:F3}", LogLevel.Debug);
                         }
                     }
                     catch (Exception ex)
                     {
-                        AppLogger.Log($"GetDxfBoundingBox: Error processing entity at index {entityIndex}, Type:{entity.GetType().Name}. Error: {ex.Message}", ex, LogLevel.Warning);
+                        AppLogger.Log($"GetDxfBoundingBox: Error processing entity at index {entityIndex}, Type:{entityType}, Layer:'{entityLayer}'. Error: {ex.Message}", ex, LogLevel.Error);
                         // Skip entities that can't be processed
                     }
                     entityIndex++;
@@ -2468,28 +2456,28 @@ namespace RobTeach.Views
             }
             else
             {
-                AppLogger.Log("GetDxfBoundingBox: No entities found in DXF or Entities collection is null.", LogLevel.Debug);
+                AppLogger.Log("GetDxfBoundingBox: No entities found in DXF or Entities collection is null.", LogLevel.Info);
             }
 
             if (!hasValidBounds)
             {
-                AppLogger.Log("GetDxfBoundingBox: No valid bounds found for any entity. Returning Rect.Empty.", LogLevel.Debug);
+                AppLogger.Log("GetDxfBoundingBox: No valid bounds found for any entity. Returning Rect.Empty.", LogLevel.Warning);
                 return Rect.Empty;
             }
 
-            AppLogger.Log($"GetDxfBoundingBox: Final Calculated BoundingBox: X={minX:F2}, Y={minY:F2}, Width={maxX - minX:F2}, Height={maxY - minY:F2}", LogLevel.Info);
-            return new System.Windows.Rect(minX, minY, maxX - minX, maxY - minY);
+            Rect finalBoundingBox = new System.Windows.Rect(minX, minY, maxX - minX, maxY - minY);
+            AppLogger.Log($"GetDxfBoundingBox: Final Calculated BoundingBox: X={finalBoundingBox.X:F3}, Y={finalBoundingBox.Y:F3}, Width={finalBoundingBox.Width:F3}, Height={finalBoundingBox.Height:F3}", LogLevel.Info);
+            return finalBoundingBox;
         }
 
-        private void FitToViewButton_Click(object sender, RoutedEventArgs e) { Debug.WriteLine("[DEBUG] FitToViewButton_Click called."); PerformFitToView(); }
+        private void FitToViewButton_Click(object sender, RoutedEventArgs e) { AppLogger.Log("[USER ACTION] FitToViewButton_Click called.", LogLevel.Debug); PerformFitToView(); }
         private void PerformFitToView()
         {
-            Debug.WriteLine("[DEBUG] PerformFitToView: Entered.");
-            AppLogger.Log($"PerformFitToView: Initial _dxfBoundingBox: X={_dxfBoundingBox.X:F2}, Y={_dxfBoundingBox.Y:F2}, Width={_dxfBoundingBox.Width:F2}, Height={_dxfBoundingBox.Height:F2}", LogLevel.Debug);
+            AppLogger.Log("PerformFitToView: Method started.", LogLevel.Info);
+            AppLogger.Log($"PerformFitToView: Initial _dxfBoundingBox: X={_dxfBoundingBox.X:F3}, Y={_dxfBoundingBox.Y:F3}, Width={_dxfBoundingBox.Width:F3}, Height={_dxfBoundingBox.Height:F3}", LogLevel.Debug);
 
-            // Ensure ActualWidth and ActualHeight are logged *before* use if a condition might skip their logging later
             if (CadCanvas.ActualWidth <= 0 || CadCanvas.ActualHeight <= 0) {
-                 AppLogger.Log($"[WARNING] PerformFitToView: Canvas ActualWidth ({CadCanvas.ActualWidth}) or ActualHeight ({CadCanvas.ActualHeight}) is zero or negative. Attempting to reset transforms and exit.", LogLevel.Warning);
+                 AppLogger.Log($"[CRITICAL] PerformFitToView: Canvas ActualWidth ({CadCanvas.ActualWidth:F2}) or ActualHeight ({CadCanvas.ActualHeight:F2}) is zero or negative. Cannot perform fit. Resetting transforms and exiting.", LogLevel.Error);
                 _scaleTransform.ScaleX = 1;
                 _scaleTransform.ScaleY = 1;
                 _translateTransform.X = 0;
@@ -2497,18 +2485,17 @@ namespace RobTeach.Views
                 StatusTextBlock.Text = "Error: Canvas size invalid for fit.";
                 return;
             }
-            // Log them again if we proceed, for context with other calculations
+
             AppLogger.Log($"PerformFitToView: Canvas ActualWidth={CadCanvas.ActualWidth:F2}, ActualHeight={CadCanvas.ActualHeight:F2}", LogLevel.Debug);
 
-
-            if (_dxfBoundingBox.IsEmpty) // Removed ActualWidth/Height check here as it's done above
+            if (_dxfBoundingBox.IsEmpty)
             {
-                AppLogger.Log("[DEBUG] PerformFitToView: BoundingBox is empty. Resetting transforms.", LogLevel.Debug);
+                AppLogger.Log("PerformFitToView: _dxfBoundingBox is empty. Resetting transforms and exiting.", LogLevel.Warning);
                 _scaleTransform.ScaleX = 1;
                 _scaleTransform.ScaleY = 1;
                 _translateTransform.X = 0;
                 _translateTransform.Y = 0;
-                // Debug.WriteLine("[DEBUG] PerformFitToView: Exiting due to empty bounds or zero canvas size."); // Covered by AppLogger
+                StatusTextBlock.Text = "Fit to view failed: No content bounds.";
                 return;
             }
 
@@ -2517,10 +2504,11 @@ namespace RobTeach.Views
 
             double contentWidth = _dxfBoundingBox.Width;
             double contentHeight = _dxfBoundingBox.Height;
+            AppLogger.Log($"PerformFitToView: Content Dimensions: Width={contentWidth:F3}, Height={contentHeight:F3}", LogLevel.Debug);
 
-            if (contentWidth <= 0 || contentHeight <= 0)
+            if (contentWidth <= 1e-6 || contentHeight <= 1e-6) // Use a small epsilon for zero check
             {
-                AppLogger.Log($"[WARNING] PerformFitToView: ContentWidth ({contentWidth:F2}) or ContentHeight ({contentHeight:F2}) is zero or negative. Resetting transforms.", LogLevel.Warning);
+                AppLogger.Log($"[WARNING] PerformFitToView: ContentWidth ({contentWidth:F3}) or ContentHeight ({contentHeight:F3}) is zero or extremely small. Resetting transforms.", LogLevel.Warning);
                 _scaleTransform.ScaleX = 1;
                 _scaleTransform.ScaleY = 1;
                 _translateTransform.X = 0;
@@ -2533,32 +2521,35 @@ namespace RobTeach.Views
             double scaleX = canvasWidth / contentWidth;
             double scaleY = canvasHeight / contentHeight;
             double scale = Math.Min(scaleX, scaleY);
+            AppLogger.Log($"PerformFitToView: Calculated raw scales: scaleX={scaleX:F4}, scaleY={scaleY:F4}. Chosen scale (min): {scale:F4}", LogLevel.Debug);
 
-            double marginFactor = 0.90;
+            double marginFactor = 0.95; // Increased margin slightly for better visibility
             scale *= marginFactor;
+            AppLogger.Log($"PerformFitToView: Scale after margin ({marginFactor * 100}%): {scale:F4}", LogLevel.Debug);
 
-            // Prevent scale from becoming zero or negative if something went wrong
-            if (scale <= 0) {
-                AppLogger.Log($"[WARNING] PerformFitToView: Calculated scale ({scale:F4}) is zero or negative. Resetting to default.", LogLevel.Warning);
-                scale = 1.0; // Default to a 1:1 scale if calculation fails badly
+            if (scale <= 1e-6) { // Use a small epsilon for zero check
+                AppLogger.Log($"[WARNING] PerformFitToView: Calculated scale ({scale:F4}) is zero or extremely small. Resetting to default 1.0.", LogLevel.Warning);
+                scale = 1.0;
             }
 
             _scaleTransform.ScaleX = scale;
             _scaleTransform.ScaleY = -scale; // Invert Y-axis for CAD coordinate system (Y up)
+            AppLogger.Log($"PerformFitToView: Applied ScaleTransform: ScaleX={_scaleTransform.ScaleX:F4}, ScaleY={_scaleTransform.ScaleY:F4}", LogLevel.Info);
 
             double contentCenterX = _dxfBoundingBox.X + _dxfBoundingBox.Width / 2.0;
             double contentCenterY = _dxfBoundingBox.Y + _dxfBoundingBox.Height / 2.0;
+            AppLogger.Log($"PerformFitToView: Content Center (DXF coords): X={contentCenterX:F3}, Y={contentCenterY:F3}", LogLevel.Debug);
 
+            // Calculate required translation to center the content
+            // Target canvas center: (canvasWidth / 2.0, canvasHeight / 2.0)
+            // Current content center in canvas coords (after scaling, before translation):
+            // (contentCenterX * _scaleTransform.ScaleX, contentCenterY * _scaleTransform.ScaleY)
             _translateTransform.X = (canvasWidth / 2.0) - (contentCenterX * _scaleTransform.ScaleX);
             _translateTransform.Y = (canvasHeight / 2.0) - (contentCenterY * _scaleTransform.ScaleY);
-
-            AppLogger.Log($"PerformFitToView (Centering): Final ScaleX={_scaleTransform.ScaleX:F4}, ScaleY={_scaleTransform.ScaleY:F4}", LogLevel.Info);
-            AppLogger.Log($"PerformFitToView (Centering): Final TranslateX={_translateTransform.X:F2}, TranslateY={_translateTransform.Y:F2}", LogLevel.Info);
-            AppLogger.Log($"PerformFitToView (Centering): ContentCenter DXF X:{contentCenterX:F2}, Y:{contentCenterY:F2}", LogLevel.Debug);
-            AppLogger.Log($"PerformFitToView (Centering): CanvasCenter X:{canvasWidth / 2.0:F2}, Y:{canvasHeight / 2.0:F2}", LogLevel.Debug);
+            AppLogger.Log($"PerformFitToView: Applied TranslateTransform: X={_translateTransform.X:F3}, Y={_translateTransform.Y:F3}", LogLevel.Info);
 
             StatusTextBlock.Text = "View fitted to content.";
-            Debug.WriteLine("[DEBUG] PerformFitToView: Completed with centering translation.");
+            AppLogger.Log("PerformFitToView: Method completed.", LogLevel.Info);
         }
         private void CadCanvas_MouseWheel(object sender, MouseWheelEventArgs e) { /* ... (No change) ... */ }
         private void CadCanvas_MouseDown(object sender, MouseButtonEventArgs e)
