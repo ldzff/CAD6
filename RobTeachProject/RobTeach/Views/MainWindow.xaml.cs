@@ -2586,33 +2586,17 @@ namespace RobTeach.Views
             _scaleTransform.ScaleY = -scale; // Invert Y-axis for CAD coordinate system (Y up)
             AppLogger.Log($"PerformFitToView: Applied ScaleTransform: ScaleX={_scaleTransform.ScaleX:F4}, ScaleY={_scaleTransform.ScaleY:F4}", LogLevel.Info);
 
-            // New strategy: Align top-left of bounding box (DXF coordinates) to top-left of canvas (with margin)
-            double margin = canvasWidth * 0.025; // 2.5% margin, min of 5px
-            if (canvasHeight * 0.025 < margin) margin = canvasHeight * 0.025;
-            margin = Math.Max(5, margin);
-            AppLogger.Log($"PerformFitToView: Using margin: {margin:F2}", LogLevel.Debug);
+            // Reverted to Centering Logic (using the potentially tighter bounding box)
+            double contentCenterX = _dxfBoundingBox.X + _dxfBoundingBox.Width / 2.0;
+            double contentCenterY = _dxfBoundingBox.Y + _dxfBoundingBox.Height / 2.0; // This is MinY + Height/2
+            AppLogger.Log($"PerformFitToView (Centering): Content Center (DXF coords): X={contentCenterX:F3}, Y={contentCenterY:F3}", LogLevel.Debug);
 
-            // DXF coordinates of the top-left corner of the bounding box
-            double dxfBoxLeftX = _dxfBoundingBox.X;
-            double dxfBoxTopY = _dxfBoundingBox.Y + _dxfBoundingBox.Height; // In DXF, Y is min, so top Y is Y+Height
+            _translateTransform.X = (canvasWidth / 2.0) - (contentCenterX * _scaleTransform.ScaleX);
+            _translateTransform.Y = (canvasHeight / 2.0) - (contentCenterY * _scaleTransform.ScaleY);
+            AppLogger.Log($"PerformFitToView (Centering): Applied TranslateTransform: X={_translateTransform.X:F3}, Y={_translateTransform.Y:F3}", LogLevel.Info);
 
-            // targetCanvasX = (dxfBoxLeftX * _scaleTransform.ScaleX) + _translateTransform.X
-            // targetCanvasY = (dxfBoxTopY * _scaleTransform.ScaleY) + _translateTransform.Y
-            // We want targetCanvasX = margin, targetCanvasY = margin.
-
-            _translateTransform.X = margin - (dxfBoxLeftX * _scaleTransform.ScaleX);
-            // _translateTransform.Y = margin - (dxfBoxTopY * _scaleTransform.ScaleY); // Original Top-Left Y
-
-            // DIAGNOSTIC: Force a large positive Y translation
-            _translateTransform.Y = canvasHeight / 2.0; // Force it down by half canvas height for testing
-            AppLogger.Log($"[DIAGNOSTIC] PerformFitToView: Overriding TranslateY to: {_translateTransform.Y:F3}", LogLevel.Warning);
-
-
-            AppLogger.Log($"PerformFitToView (Top-Left Align strategy for X, DIAGNOSTIC Y): DXF BBox TL: X={dxfBoxLeftX:F3}, Y={dxfBoxTopY:F3}", LogLevel.Debug);
-            AppLogger.Log($"PerformFitToView (Top-Left Align strategy for X, DIAGNOSTIC Y): Applied TranslateTransform: X={_translateTransform.X:F3}, Y={_translateTransform.Y:F3}", LogLevel.Info);
-
-            StatusTextBlock.Text = "View fitted (Diagnostic TL-X, Forced Y).";
-            AppLogger.Log("PerformFitToView: Method completed with Diagnostic Top-Left X alignment and Forced Y translation.", LogLevel.Info);
+            StatusTextBlock.Text = "View fitted to content (centered).";
+            AppLogger.Log("PerformFitToView: Method completed with centering alignment.", LogLevel.Info);
         }
         private void CadCanvas_MouseWheel(object sender, MouseWheelEventArgs e) { /* ... (No change) ... */ }
         private void CadCanvas_MouseDown(object sender, MouseButtonEventArgs e)
