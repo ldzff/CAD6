@@ -2586,20 +2586,28 @@ namespace RobTeach.Views
             _scaleTransform.ScaleY = -scale; // Invert Y-axis for CAD coordinate system (Y up)
             AppLogger.Log($"PerformFitToView: Applied ScaleTransform: ScaleX={_scaleTransform.ScaleX:F4}, ScaleY={_scaleTransform.ScaleY:F4}", LogLevel.Info);
 
-            double contentCenterX = _dxfBoundingBox.X + _dxfBoundingBox.Width / 2.0;
-            double contentCenterY = _dxfBoundingBox.Y + _dxfBoundingBox.Height / 2.0;
-            AppLogger.Log($"PerformFitToView: Content Center (DXF coords): X={contentCenterX:F3}, Y={contentCenterY:F3}", LogLevel.Debug);
+            // New strategy: Align top-left of bounding box (DXF coordinates) to top-left of canvas (with margin)
+            double margin = canvasWidth * 0.025; // 2.5% margin, min of 5px
+            if (canvasHeight * 0.025 < margin) margin = canvasHeight * 0.025;
+            margin = Math.Max(5, margin);
+            AppLogger.Log($"PerformFitToView: Using margin: {margin:F2}", LogLevel.Debug);
 
-            // Calculate required translation to center the content
-            // Target canvas center: (canvasWidth / 2.0, canvasHeight / 2.0)
-            // Current content center in canvas coords (after scaling, before translation):
-            // (contentCenterX * _scaleTransform.ScaleX, contentCenterY * _scaleTransform.ScaleY)
-            _translateTransform.X = (canvasWidth / 2.0) - (contentCenterX * _scaleTransform.ScaleX);
-            _translateTransform.Y = (canvasHeight / 2.0) - (contentCenterY * _scaleTransform.ScaleY);
-            AppLogger.Log($"PerformFitToView: Applied TranslateTransform: X={_translateTransform.X:F3}, Y={_translateTransform.Y:F3}", LogLevel.Info);
+            // DXF coordinates of the top-left corner of the bounding box
+            double dxfBoxLeftX = _dxfBoundingBox.X;
+            double dxfBoxTopY = _dxfBoundingBox.Y + _dxfBoundingBox.Height; // In DXF, Y is min, so top Y is Y+Height
 
-            StatusTextBlock.Text = "View fitted to content.";
-            AppLogger.Log("PerformFitToView: Method completed.", LogLevel.Info);
+            // targetCanvasX = (dxfBoxLeftX * _scaleTransform.ScaleX) + _translateTransform.X
+            // targetCanvasY = (dxfBoxTopY * _scaleTransform.ScaleY) + _translateTransform.Y
+            // We want targetCanvasX = margin, targetCanvasY = margin.
+
+            _translateTransform.X = margin - (dxfBoxLeftX * _scaleTransform.ScaleX);
+            _translateTransform.Y = margin - (dxfBoxTopY * _scaleTransform.ScaleY);
+
+            AppLogger.Log($"PerformFitToView (Top-Left Align): DXF BBox TL: X={dxfBoxLeftX:F3}, Y={dxfBoxTopY:F3}", LogLevel.Debug);
+            AppLogger.Log($"PerformFitToView (Top-Left Align): Applied TranslateTransform: X={_translateTransform.X:F3}, Y={_translateTransform.Y:F3}", LogLevel.Info);
+
+            StatusTextBlock.Text = "View fitted to content (TL aligned).";
+            AppLogger.Log("PerformFitToView: Method completed with top-left alignment.", LogLevel.Info);
         }
         private void CadCanvas_MouseWheel(object sender, MouseWheelEventArgs e) { /* ... (No change) ... */ }
         private void CadCanvas_MouseDown(object sender, MouseButtonEventArgs e)
