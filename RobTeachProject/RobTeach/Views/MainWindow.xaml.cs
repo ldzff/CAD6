@@ -2392,11 +2392,27 @@ namespace RobTeach.Views
             double minX = double.MaxValue, minY = double.MaxValue;
             double maxX = double.MinValue, maxY = double.MinValue;
             bool hasValidBounds = false;
+            int significantEntitiesCount = 0; // Count entities that are not the special large axis lines
 
             // Calculate bounds directly from entities
             if (dxfDoc.Entities != null && dxfDoc.Entities.Any())
             {
                 AppLogger.Log($"GetDxfBoundingBox: Processing {dxfDoc.Entities.Count()} entities.", LogLevel.Info);
+
+                // First pass: count significant entities
+                foreach (var entity in dxfDoc.Entities)
+                {
+                    if (entity == null || _layersToIgnoreForBoundingBox.Contains((entity.Layer ?? "NULL_LAYER"), StringComparer.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    if (!IsSpecialAxisLine(entity))
+                    {
+                        significantEntitiesCount++;
+                    }
+                }
+                AppLogger.Log($"GetDxfBoundingBox: Found {significantEntitiesCount} significant (non-axis or non-filtered) entities.", LogLevel.Debug);
+
                 int entityIndex = 0;
                 foreach (var entity in dxfDoc.Entities)
                 {
@@ -2411,7 +2427,6 @@ namespace RobTeach.Views
                     string entityLayer = entity.Layer ?? "NULL_LAYER";
                     AppLogger.Log($"GetDxfBoundingBox: Processing Entity Idx:{entityIndex}, Type:{entityType}, Layer:'{entityLayer}'.", LogLevel.Debug);
 
-                    // Layer filtering for bounding box
                     if (_layersToIgnoreForBoundingBox.Contains(entityLayer, StringComparer.OrdinalIgnoreCase))
                     {
                         AppLogger.Log($"GetDxfBoundingBox: Idx:{entityIndex}, Type:{entityType}, Layer:'{entityLayer}' - SKIPPED for bounding box due to layer filter.", LogLevel.Info);
@@ -2419,22 +2434,36 @@ namespace RobTeach.Views
                         continue;
                     }
 
+                    // Heuristic: If there are significant entities, ignore the special axis lines for bounding box calculation.
+                    if (significantEntitiesCount > 0 && IsSpecialAxisLine(entity))
+                    {
+                        AppLogger.Log($"GetDxfBoundingBox: Idx:{entityIndex}, Type:{entityType}, Layer:'{entityLayer}' - SKIPPED as it's a special axis line and other significant entities exist.", LogLevel.Info);
+                        entityIndex++;
+                        continue;
+                    }
+
                     try
                     {
-                        // Calculate entity bounds directly
                         var boundsTuple = CalculateEntityBoundsSimple(entity);
-                        string boundsStr = "null";
                         if (boundsTuple.HasValue)
                         {
                             var (eMinX_val, eMinY_val, eMaxX_val, eMaxY_val) = boundsTuple.Value;
-                            boundsStr = $"MinX:{eMinX_val:F3}, MinY:{eMinY_val:F3}, MaxX:{eMaxX_val:F3}, MaxY:{eMaxY_val:F3}";
+                            string boundsStr = $"MinX:{eMinX_val:F3}, MinY:{eMinY_val:F3}, MaxX:{eMaxX_val:F3}, MaxY:{eMaxY_val:F3}";
                             AppLogger.Log($"GetDxfBoundingBox: Idx:{entityIndex}, Type:{entityType}, Layer:'{entityLayer}'. Individual Bounds: {boundsStr}", LogLevel.Debug);
 
-                            minX = Math.Min(minX, eMinX_val);
-                            minY = Math.Min(minY, eMinY_val);
-                            maxX = Math.Max(maxX, eMaxX_val);
-                            maxY = Math.Max(maxY, eMaxY_val);
-                            hasValidBounds = true;
+                            if (!hasValidBounds) // First valid entity initializes the bounds
+                            {
+                                minX = eMinX_val; minY = eMinY_val;
+                                maxX = eMaxX_val; maxY = eMaxY_val;
+                                hasValidBounds = true;
+                            }
+                            else // Subsequent entities expand the bounds
+                            {
+                                minX = Math.Min(minX, eMinX_val);
+                                minY = Math.Min(minY, eMinY_val);
+                                maxX = Math.Max(maxX, eMaxX_val);
+                                maxY = Math.Max(maxY, eMaxY_val);
+                            }
                         }
                         else
                         {
@@ -2468,6 +2497,27 @@ namespace RobTeach.Views
             Rect finalBoundingBox = new System.Windows.Rect(minX, minY, maxX - minX, maxY - minY);
             AppLogger.Log($"GetDxfBoundingBox: Final Calculated BoundingBox: X={finalBoundingBox.X:F3}, Y={finalBoundingBox.Y:F3}, Width={finalBoundingBox.Width:F3}, Height={finalBoundingBox.Height:F3}", LogLevel.Info);
             return finalBoundingBox;
+        }
+
+        private bool IsSpecialAxisLine(DxfEntity entity)
+        {
+            if (entity is DxfLine line)
+            {
+                // Check for horizontal axis line: Y approx 0, X spans -1000 to 1000 (or vice-versa)
+                bool isHorizontalAxis =
+                    (Math.Abs(line.P1.Y) < 0.01 && Math.Abs(line.P2.Y) < 0.01 && Math.Abs(line.P1.Z) < 0.01 && Math.Abs(line.P2.Z) < 0.01) &&
+                    ((Math.Abs(line.P1.X + 1000.0) < 0.01 && Math.Abs(line.P2.X - 1000.0) < 0.01) ||
+                     (Math.Abs(line.P1.X - 1000.0) < 0.01 && Math.Abs(line.P2.X + 1000.0) < 0.01));
+
+                // Check for vertical axis line: X approx 0, Y spans -1000 to 1000 (or vice-versa)
+                bool isVerticalAxis =
+                    (Math.Abs(line.P1.X) < 0.01 && Math.Abs(line.P2.X) < 0.01 && Math.Abs(line.P1.Z) < 0.01 && Math.Abs(line.P2.Z) < 0.01) &&
+                    ((Math.Abs(line.P1.Y + 1000.0) < 0.01 && Math.Abs(line.P2.Y - 1000.0) < 0.01) ||
+                     (Math.Abs(line.P1.Y - 1000.0) < 0.01 && Math.Abs(line.P2.Y + 1000.0) < 0.01));
+
+                return isHorizontalAxis || isVerticalAxis;
+            }
+            return false;
         }
 
         private void FitToViewButton_Click(object sender, RoutedEventArgs e) { AppLogger.Log("[USER ACTION] FitToViewButton_Click called.", LogLevel.Debug); PerformFitToView(); }
