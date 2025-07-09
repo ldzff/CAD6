@@ -1527,22 +1527,41 @@ namespace RobTeach.Views
 
                     _dxfBoundingBox = GetDxfBoundingBox(_currentDxfDocument);
                     // Call PerformFitToView after layout has had a chance to update
-                    Debug.WriteLine($"[DEBUG] LoadDxfButton_Click: Scheduling PerformFitToView via Dispatcher. CanvasSize=({CadCanvas.ActualWidth}, {CadCanvas.ActualHeight})");
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        Debug.WriteLine($"[DEBUG] LoadDxfButton_Click (Dispatcher): Calling PerformFitToView. CanvasSize=({CadCanvas.ActualWidth}, {CadCanvas.ActualHeight})");
-                        PerformFitToView();
-                        StatusTextBlock.Text = $"Loaded: {Path.GetFileName(_currentDxfFilePath)}. Click shapes to select.";
-                        AppLogger.Log($"Successfully loaded DXF: {Path.GetFileName(_currentDxfFilePath)}");
-                        if (_currentDxfDocument?.Header != null)
-                        {
-                            AppLogger.Log($"DXF Header Units: {_currentDxfDocument.Header.DefaultDrawingUnits}", LogLevel.Info);
-                        }
-                        isConfigurationDirty = false; // Set dirty flag only after successful load and fit
-                        Debug.WriteLine("[DEBUG] LoadDxfButton_Click (Dispatcher): PerformFitToView completed.");
-                    }), DispatcherPriority.Background);
-                    // Note: isConfigurationDirty is set to false inside the dispatcher action.
-                    // If it needed to be set immediately, it would be here, but it's better tied to the completion of fitting.
+                    // Debug.WriteLine($"[DEBUG] LoadDxfButton_Click: Scheduling PerformFitToView via Dispatcher. CanvasSize=({CadCanvas.ActualWidth}, {CadCanvas.ActualHeight})");
+                    // Dispatcher.BeginInvoke(new Action(() =>
+                    // {
+                    //     Debug.WriteLine($"[DEBUG] LoadDxfButton_Click (Dispatcher): Calling PerformFitToView. CanvasSize=({CadCanvas.ActualWidth}, {CadCanvas.ActualHeight})");
+                    //     PerformFitToView();
+                    //     StatusTextBlock.Text = $"Loaded: {Path.GetFileName(_currentDxfFilePath)}. Click shapes to select.";
+                    //     AppLogger.Log($"Successfully loaded DXF: {Path.GetFileName(_currentDxfFilePath)}");
+                    //     if (_currentDxfDocument?.Header != null)
+                    //     {
+                    //         AppLogger.Log($"DXF Header Units: {_currentDxfDocument.Header.DefaultDrawingUnits}", LogLevel.Info);
+                    //     }
+                    //     isConfigurationDirty = false; // Set dirty flag only after successful load and fit
+                    //     Debug.WriteLine("[DEBUG] LoadDxfButton_Click (Dispatcher): PerformFitToView completed.");
+                    // }), DispatcherPriority.Background);
+
+
+                    // ---- DIAGNOSTIC: Apply hardcoded simple transform ----
+                    CadCanvas.RenderTransformOrigin = new Point(0,0); // Explicitly set default
+                    double diagnosticScale = 0.2; // Smallish scale to see more
+                    double diagnosticTranslateX = 150;
+                    double diagnosticTranslateY = 250; // Significant Y translation to push content down
+
+                    TranslateTransform simpleTranslate = new TranslateTransform(diagnosticTranslateX, diagnosticTranslateY);
+                    ScaleTransform simpleScale = new ScaleTransform(diagnosticScale, -diagnosticScale); // Y flip
+
+                    TransformGroup simpleTg = new TransformGroup();
+                    simpleTg.Children.Add(simpleScale);   // Scale first
+                    simpleTg.Children.Add(simpleTranslate); // Then translate
+                    CadCanvas.RenderTransform = simpleTg;
+
+                    AppLogger.Log($"[DIAGNOSTIC] Applied hardcoded transform: Scale={diagnosticScale:F2}, Translate=({diagnosticTranslateX:F2}, {diagnosticTranslateY:F2}). PerformFitToView SKIPPED.", LogLevel.Warning);
+                    StatusTextBlock.Text = "DIAGNOSTIC VIEW: Hardcoded transform. Fit-to-View disabled on load.";
+                    //----------------------------------------------------------
+
+                    isConfigurationDirty = false;
                     UpdateDirectionIndicator(); // Update after loading and potential default selections
                     UpdateOrderNumberLabels();
                     StartTestRunButton.IsEnabled = false; // New DXF loaded, robot program state is now unknown/stale
