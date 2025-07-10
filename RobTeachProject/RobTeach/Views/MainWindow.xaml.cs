@@ -1526,44 +1526,31 @@ namespace RobTeach.Views
                     }
 
                     _dxfBoundingBox = GetDxfBoundingBox(_currentDxfDocument);
-                    _dxfBoundingBox = GetDxfBoundingBox(_currentDxfDocument); // Still calculate for context, though not used by direct transform
+                    _dxfBoundingBox = GetDxfBoundingBox(_currentDxfDocument);
+                    // Call PerformFitToView after layout has had a chance to update
+                    Debug.WriteLine($"[DEBUG] LoadDxfButton_Click: Scheduling PerformFitToView via Dispatcher. CanvasSize=({CadCanvas.ActualWidth}, {CadCanvas.ActualHeight})");
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        Debug.WriteLine($"[DEBUG] LoadDxfButton_Click (Dispatcher): Calling PerformFitToView. CanvasSize=({CadCanvas.ActualWidth}, {CadCanvas.ActualHeight})");
+                        PerformFitToView(); // This will use the tighter bounding box and centering logic
+                        StatusTextBlock.Text = $"Loaded: {Path.GetFileName(_currentDxfFilePath)}. Click shapes to select.";
+                        AppLogger.Log($"Successfully loaded DXF: {Path.GetFileName(_currentDxfFilePath)}");
+                        if (_currentDxfDocument?.Header != null)
+                        {
+                            AppLogger.Log($"DXF Header Units: {_currentDxfDocument.Header.DefaultDrawingUnits}", LogLevel.Info);
+                        }
+                        isConfigurationDirty = false; // Set dirty flag only after successful load and fit
+                        Debug.WriteLine("[DEBUG] LoadDxfButton_Click (Dispatcher): PerformFitToView completed.");
+                    }), DispatcherPriority.Background);
 
-                    // ---- DIAGNOSTIC: Apply a very simple, fixed scale directly ----
-                    CadCanvas.RenderTransformOrigin = new Point(0,0); // Ensure origin is top-left for RenderTransform effects
-
-                    double simpleScaleFactor = 0.5;
-                    ScaleTransform directScale = new ScaleTransform(simpleScaleFactor, -simpleScaleFactor); // Scale by 50%, flip Y
-
-                    // Apply only this scale transform directly, no translation for this initial test
-                    CadCanvas.RenderTransform = directScale;
-
-                    AppLogger.Log($"[DIAGNOSTIC] Applied DIRECT ScaleTransform ({simpleScaleFactor:F2}, {-simpleScaleFactor:F2}) to CadCanvas. No TranslateTransform. PerformFitToView SKIPPED.", LogLevel.Warning);
-                    StatusTextBlock.Text = "DIAGNOSTIC: Direct Scale Only, No Translation";
-
-                    // Update member fields so pan/zoom handlers don't use stale data or crash, though their behavior will be off without proper initial setup
-                    _scaleTransform = new ScaleTransform(simpleScaleFactor, -simpleScaleFactor); // Keep a reference if needed by other parts
-                    _translateTransform = new TranslateTransform(0, 0); // No translation initially
-
-                    // _transformGroup is still the one assigned to CadCanvas.RenderTransform in the constructor,
-                    // but CadCanvas.RenderTransform is now overridden.
-                    // For safety, if pan/zoom are used, they modify _scaleTransform and _translateTransform,
-                    // which are NOT the live transforms on CadCanvas anymore for this diagnostic.
-                    // To make pan/zoom work with this diagnostic, they'd need to operate on 'directScale' or re-apply a new group.
-                    // For now, this test focuses on initial display. Zoom/Pan might behave unexpectedly.
-                    // A cleaner way for this diagnostic would be to also set _transformGroup to use these,
-                    // but the goal is to test minimal direct transform first.
-                    // Let's update _transformGroup to reflect this simple state for consistency if zoom/pan is attempted.
-                    _transformGroup.Children.Clear();
-                    _transformGroup.Children.Add(_scaleTransform);
-                    _transformGroup.Children.Add(_translateTransform);
-                    // CadCanvas.RenderTransform = _transformGroup; // Re-assign if we want zoom/pan to work from this state.
-                                                                // For now, leave CadCanvas.RenderTransform as 'directScale' to test it in isolation.
-                                                                // This means zoom/pan won't work as they modify _transformGroup's children.
-                    AppLogger.Log("[DIAGNOSTIC] Pan/Zoom handlers will operate on _scaleTransform/_translateTransform which are NOT the live canvas transform for this initial view.", LogLevel.Debug);
+                    // Ensure _transformGroup (set in constructor and used by PerformFitToView) is the active transform.
+                    // This line is technically redundant if constructor correctly sets it and it's not changed, but ensures clarity.
+                    CadCanvas.RenderTransform = _transformGroup;
+                    AppLogger.Log($"LoadDxfButton_Click: Ensured CadCanvas.RenderTransform is _transformGroup.", LogLevel.Debug);
 
 
-                    isConfigurationDirty = false;
-                    UpdateDirectionIndicator();
+                    isConfigurationDirty = false; // Reset before potential async operations might change it.
+                    UpdateDirectionIndicator(); // Update after loading and potential default selections
                     UpdateOrderNumberLabels();
                     StartTestRunButton.IsEnabled = false; // New DXF loaded, robot program state is now unknown/stale
                 } else {
