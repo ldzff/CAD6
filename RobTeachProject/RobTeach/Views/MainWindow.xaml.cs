@@ -2598,7 +2598,84 @@ namespace RobTeach.Views
             StatusTextBlock.Text = "View fitted to content (centered).";
             AppLogger.Log("PerformFitToView: Method completed with centering alignment.", LogLevel.Info);
         }
-        private void CadCanvas_MouseWheel(object sender, MouseWheelEventArgs e) { /* ... (No change) ... */ }
+        private void CadCanvas_MouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (CadCanvas == null || _scaleTransform == null || _translateTransform == null)
+            {
+                AppLogger.Log("CadCanvas_MouseWheel: Canvas or transforms not initialized, skipping zoom.", LogLevel.Warning);
+                return;
+            }
+
+            Point mousePos = e.GetPosition(CadCanvas); // Mouse position relative to the CadCanvas
+
+            double zoomFactor = 1.1; // Zoom in by 10%
+            double scaleChange;
+
+            if (e.Delta > 0) // Zoom in
+            {
+                scaleChange = zoomFactor;
+            }
+            else // Zoom out
+            {
+                scaleChange = 1.0 / zoomFactor;
+            }
+
+            double newScaleX = _scaleTransform.ScaleX * scaleChange;
+            double newScaleY = _scaleTransform.ScaleY * scaleChange; // If ScaleY is negative, it will correctly become more negative or less negative
+
+            // Optional: Add min/max zoom limits
+            double minScale = 0.05;
+            double maxScale = 20.0;
+            if (Math.Abs(newScaleX) < minScale || Math.Abs(newScaleX) > maxScale)
+            {
+                AppLogger.Log($"CadCanvas_MouseWheel: Zoom scale {newScaleX:F4} out of limits [{minScale}, {maxScale}]. No zoom applied.", LogLevel.Debug);
+                return; // Zoom limit reached
+            }
+
+            AppLogger.Log($"CadCanvas_MouseWheel: MousePos=({mousePos.X:F2},{mousePos.Y:F2}), Delta={e.Delta}, OldScale=({_scaleTransform.ScaleX:F4},{_scaleTransform.ScaleY:F4}), ScaleChange={scaleChange:F4}", LogLevel.Debug);
+
+            // The point under the mouse cursor in world coordinates (DXF coordinates if Y is flipped)
+            // To get this, we need the inverse of the current total transform at the mouse point.
+            // Current transform: Scale then Translate. Inverse: Un-Translate then Un-Scale.
+            // (canvasPoint - Translation) / Scale = worldPoint
+            // canvasPoint.X = worldPoint.X * currentScaleX + currentTranslateX
+            // worldPoint.X = (canvasPoint.X - currentTranslateX) / currentScaleX
+            // worldPoint.Y = (canvasPoint.Y - currentTranslateY) / currentScaleY (where currentScaleY is negative)
+
+            Point worldPointBeforeZoom = new Point(
+                (mousePos.X - _translateTransform.X) / _scaleTransform.ScaleX,
+                (mousePos.Y - _translateTransform.Y) / _scaleTransform.ScaleY
+            );
+            AppLogger.Log($"CadCanvas_MouseWheel: WorldPointUnderMouse (BeforeZoom)=({worldPointBeforeZoom.X:F3},{worldPointBeforeZoom.Y:F3})", LogLevel.Debug);
+
+
+            _scaleTransform.ScaleX = newScaleX;
+            _scaleTransform.ScaleY = newScaleY; // Maintain the sign of original ScaleY (should be negative)
+            AppLogger.Log($"CadCanvas_MouseWheel: NewScale=({_scaleTransform.ScaleX:F4},{_scaleTransform.ScaleY:F4})", LogLevel.Debug);
+
+
+            // After scaling, the worldPointBeforeZoom, if rendered with the new scale but old translation,
+            // would now appear at a new canvas position:
+            // newCanvasPosX = worldPointBeforeZoom.X * newScaleX + oldTranslateX
+            // newCanvasPosY = worldPointBeforeZoom.Y * newScaleY + oldTranslateY
+
+            // We want this worldPointBeforeZoom to remain at mousePos.X, mousePos.Y on canvas.
+            // So, we need to find newTranslateX, newTranslateY such that:
+            // mousePos.X = worldPointBeforeZoom.X * newScaleX + newTranslateX  => newTranslateX = mousePos.X - worldPointBeforeZoom.X * newScaleX
+            // mousePos.Y = worldPointBeforeZoom.Y * newScaleY + newTranslateY  => newTranslateY = mousePos.Y - worldPointBeforeZoom.Y * newScaleY
+
+            double newTranslateX = mousePos.X - (worldPointBeforeZoom.X * _scaleTransform.ScaleX);
+            double newTranslateY = mousePos.Y - (worldPointBeforeZoom.Y * _scaleTransform.ScaleY);
+
+            _translateTransform.X = newTranslateX;
+            _translateTransform.Y = newTranslateY;
+            AppLogger.Log($"CadCanvas_MouseWheel: NewTranslate=({_translateTransform.X:F3},{_translateTransform.Y:F3})", LogLevel.Debug);
+
+            StatusTextBlock.Text = $"Zoom: {Math.Abs(_scaleTransform.ScaleX * 100):F1}%";
+            isConfigurationDirty = true; // Zoom/pan changes configuration state
+            e.Handled = true;
+        }
+
         private void CadCanvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (e.MiddleButton == MouseButtonState.Pressed ||
